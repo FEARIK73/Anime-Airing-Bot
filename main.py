@@ -5,9 +5,9 @@ import html
 from datetime import datetime, timedelta, timezone
 from pyrogram import Client, filters, idle
 from pyrogram.enums import ParseMode
-import nest_asyncio
 from flask import Flask
 from threading import Thread
+import nest_asyncio
 
 nest_asyncio.apply()
 
@@ -17,12 +17,10 @@ API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 API_URL = "https://graphql.anilist.co"
-
 CHANNEL_IDS = [-1002423492460, -1002318432801]
 
 PRE_ALERT_IDS = set()
 POST_ALERT_IDS = set()
-
 UTC = timezone.utc
 
 # ================= FLASK (KEEP ALIVE) =================
@@ -33,7 +31,8 @@ def home():
     return "Bot is alive!"
 
 def run_web():
-    web_app.run(host="0.0.0.0", port=8080)
+    # Use threaded=True to allow concurrent requests
+    web_app.run(host="0.0.0.0", port=8080, threaded=True)
 
 # -------- AUTO DELETE -------- #
 async def auto_delete(client, chat_id, message_id, delay=300):
@@ -96,7 +95,6 @@ def fetch_schedule(day_offset=0):
 
         title_raw = anime["media"]["title"]["english"] or anime["media"]["title"]["romaji"]
         title = html.escape(title_raw)
-
         ep = anime["episode"]
 
         delta = ist_time - now_ist
@@ -106,7 +104,6 @@ def fetch_schedule(day_offset=0):
             total_minutes = int(delta.total_seconds() // 60)
             hours, minutes = divmod(total_minutes, 60)
             days, hours = divmod(hours, 24)
-
             if days > 0:
                 status = f"In {days}d {hours}h {minutes}m"
             else:
@@ -124,7 +121,7 @@ def fetch_schedule(day_offset=0):
     return final_text if final_text else "No airing found 🙃"
 
 # -------- ALERT SYSTEM -------- #
-async def auto_airing_alert():
+async def auto_airing_alert(app):
     while True:
         try:
             now_ts = int(datetime.now(UTC).timestamp())
@@ -158,9 +155,7 @@ async def auto_airing_alert():
                 # PRE ALERT
                 if unique_id not in PRE_ALERT_IDS and 0 < air_ts - now_ts <= 600:
                     PRE_ALERT_IDS.add(unique_id)
-
                     m, s = divmod(air_ts - now_ts, 60)
-
                     text = f"""╰► Upcoming Episode Alert
 
 <b>✶ {title}</b>
@@ -173,7 +168,6 @@ async def auto_airing_alert():
                 # POST ALERT
                 if unique_id not in POST_ALERT_IDS and -30 <= air_ts - now_ts <= 30:
                     POST_ALERT_IDS.add(unique_id)
-
                     text = f"""╰► NEW EPISODE RELEASED
 
 <b>✶ {title}</b>
@@ -202,12 +196,15 @@ async def tomorrow(client, m):
     asyncio.create_task(auto_delete(client, msg.chat.id, msg.id))
 
 # -------- MAIN -------- #
-async def main():
-    print("Bot running...")
+async def start_bot():
     await app.start()
-    asyncio.create_task(auto_airing_alert())
+    asyncio.create_task(auto_airing_alert(app))
+    print("Bot started and running...")
     await idle()
 
 if __name__ == "__main__":
+    # Start Flask keep-alive in a separate thread
     Thread(target=run_web).start()
-    asyncio.run(main())
+    
+    # Start bot in asyncio
+    asyncio.run(start_bot())
