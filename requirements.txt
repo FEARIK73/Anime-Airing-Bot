@@ -1,5 +1,4 @@
 pyrogram
 tgcrypto
-requests
 nest_asyncio
-flask
+requests
